@@ -108,7 +108,6 @@ Y en `.env` usa:
 | `DATABASE_URL` | Sí | Cadena de conexión a PostgreSQL |
 | `NEXTAUTH_URL` | Sí | URL base de la app (`http://localhost:3000` en local) |
 | `NEXTAUTH_SECRET` | Sí | Secreto para firmar sesiones (`openssl rand -base64 32`) |
-| `ABACUSAI_API_KEY` | No | Solo para generación de PDFs y funciones de IA. La app funciona sin ella; esas funciones específicas quedarán deshabilitadas hasta integrar un proveedor equivalente. |
 
 ---
 
@@ -121,10 +120,8 @@ Y en `.env` usa:
 - No existe carpeta `prisma/migrations/`: el esquema se aplica con
   `yarn prisma db push`. Si deseas migraciones versionadas, puedes inicializarlas
   con `yarn prisma migrate dev --name init`.
-- La generación de PDFs usa un servicio HTTP de Abacus.AI (requiere
-  `ABACUSAI_API_KEY`). Para un entorno 100% independiente, reemplázala por una
-  librería local (p. ej. Playwright o Puppeteer) en las rutas
-  `app/api/**/pdf/route.ts` y `app/api/generate-pdf/`.
+- La generación de PDFs es 100% local y autónoma mediante Puppeteer (Chromium headless)
+  en `lib/pdf.ts`, sin dependencias de servicios externos en la nube.
 
 ## Build de producción
 

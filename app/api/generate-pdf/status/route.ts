@@ -1,29 +1,29 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { getPdfStatus } from '@/lib/pdf';
 
 export async function POST(request: Request) {
   try {
     const { request_id } = await request.json();
-    const statusResponse = await fetch('https://apps.abacus.ai/api/getConvertHtmlToPdfStatus', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_id, deployment_token: process.env.ABACUSAI_API_KEY }),
-    });
-    const statusResult = await statusResponse.json();
-    const status = statusResult?.status || 'FAILED';
-    const result = statusResult?.result || null;
+    if (!request_id) {
+      return NextResponse.json({ status: 'FAILED', error: 'No request_id provided' }, { status: 400 });
+    }
 
-    if (status === 'SUCCESS') {
-      if (result && result.result) {
-        return NextResponse.json({ status, pdf_base64: result.result });
-      }
-      return NextResponse.json({ status: 'FAILED', error: 'PDF generation completed but no result data' });
+    const job = getPdfStatus(request_id);
+    if (!job) {
+      return NextResponse.json({ status: 'FAILED', error: 'PDF request not found' }, { status: 404 });
     }
-    if (status === 'FAILED') {
-      return NextResponse.json({ status, error: result?.error || 'PDF generation failed' });
+
+    if (job.status === 'SUCCESS') {
+      return NextResponse.json({ status: 'SUCCESS', pdf_base64: job.pdf_base64 });
     }
-    return NextResponse.json({ status });
+
+    if (job.status === 'FAILED') {
+      return NextResponse.json({ status: 'FAILED', error: job.error || 'PDF generation failed' });
+    }
+
+    return NextResponse.json({ status: job.status });
   } catch (error) {
     console.error('Error checking PDF status:', error);
     return NextResponse.json({ status: 'FAILED', error: 'Failed to check PDF status' }, { status: 500 });

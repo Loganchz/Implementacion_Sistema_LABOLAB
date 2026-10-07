@@ -26,8 +26,7 @@ services:
       DATABASE_URL: "postgresql://labolab:labolab@db:5432/labolab_lims?schema=public"
       NEXTAUTH_URL: "http://localhost:3000"
       NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:-adu2BZqZ9hY2+Eq/x9xYFqAbalskRtmnFbRwPnwrj8M=}"
-      # Opcional: solo para generación de PDFs e IA
-      ABACUSAI_API_KEY: ""
+      PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium"
       NODE_ENV: "development"
     ports:
       - "3000:3000"

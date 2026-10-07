@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
+import { createLocalPdfJob } from '@/lib/pdf';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -185,21 +186,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
 </body>
 </html>`;
 
-    const createRes = await fetch('https://apps.abacus.ai/api/createConvertHtmlToPdfRequest', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        deployment_token: process.env.ABACUSAI_API_KEY,
-        html_content,
-        pdf_options: { format: 'A4', margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' }, print_background: true },
-      }),
+    const request_id = await createLocalPdfJob(html_content, {
+      format: 'A4',
+      margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
+      print_background: true,
     });
-
-    if (!createRes.ok) {
-      return NextResponse.json({ error: 'Error al generar PDF' }, { status: 500 });
-    }
-
-    const { request_id } = await createRes.json();
 
     await createAuditLog({
       userId: (session.user as any)?.id,

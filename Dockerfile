@@ -3,10 +3,18 @@
 # ==========================================================================
 FROM node:20-bookworm-slim
 
-# openssl es requerido por Prisma; ca-certificates para descargas seguras
+# openssl es requerido por Prisma; ca-certificates para descargas; chromium y fuentes para PDFs locales
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends \
+     openssl \
+     ca-certificates \
+     chromium \
+     fonts-liberation \
+     fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Habilita Yarn Berry vía corepack
 RUN corepack enable

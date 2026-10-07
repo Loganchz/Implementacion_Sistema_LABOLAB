@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FileBarChart, ArrowLeft, Save, Download, Loader2, AlertTriangle, ShieldCheck, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import QRCode from 'qrcode';
 
 export default function ReporteDetallePage() {
   const params = useParams();
@@ -21,8 +22,21 @@ export default function ReporteDetallePage() {
   const [generating, setGenerating] = useState(false);
   const [form, setForm] = useState({ observations: '', conclusions: '', analystName: '', directorName: '', notes: '' });
   const [origin, setOrigin] = useState('');
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
+
+  useEffect(() => {
+    if (report?.reportNumber && origin) {
+      QRCode.toDataURL(`${origin}/verificar/${report.reportNumber}`, {
+        width: 110,
+        margin: 1,
+        color: { dark: '#005F9E', light: '#FFFFFF' },
+      })
+        .then(setQrCodeUrl)
+        .catch(() => {});
+    }
+  }, [report?.reportNumber, origin]);
 
   const loadReport = useCallback(async () => {
     try {
@@ -154,7 +168,7 @@ export default function ReporteDetallePage() {
         <Card className="border-none shadow-sm mb-6">
           <CardContent className="p-4 flex items-center gap-4">
             <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&color=005F9E&data=${encodeURIComponent(`${origin}/verificar/${report.reportNumber}`)}`}
+              src={qrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=110x110&color=005F9E&data=${encodeURIComponent(`${origin}/verificar/${report.reportNumber}`)}`}
               alt="Código QR de verificación"
               className="w-24 h-24 rounded-lg border border-gray-100"
             />

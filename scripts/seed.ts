@@ -6,22 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // 1. Test admin user (required for platform testing)
-  const hashedPassword = await bcrypt.hash('Yd2yVr*NG8', 10);
-  await prisma.user.upsert({
-    where: { email: 'abacus-b9c39a5e@example.com' },
-    update: { password: hashedPassword },
-    create: {
-      email: 'abacus-b9c39a5e@example.com',
-      password: hashedPassword,
-      name: 'Administrador',
-      role: 'ADMIN',
-      active: true,
-    },
-  });
-  console.log('✅ Admin user created');
-
-  // 1b. Navigable admin user (requested by client)
+  // 1. Admin user
   const adminNavPass = await bcrypt.hash('Adminuz4duy!89', 10);
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@labolab.com.ec' },
