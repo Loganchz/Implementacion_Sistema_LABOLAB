@@ -1,0 +1,455 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SECRETARIA
+  ANALISTA_FQ
+  ANALISTA_MICA
+  CLIENTE
+}
+
+enum RequestStatus {
+  BORRADOR
+  ENVIADA
+  EN_COTIZACION
+  CONFIRMADA
+  CANCELADA
+}
+
+enum QuoteStatus {
+  BORRADOR
+  ENVIADA
+  ACEPTADA
+  RECHAZADA
+  VENCIDA
+}
+
+enum WorkOrderStatus {
+  ABIERTA
+  EN_PROCESO
+  COMPLETADA
+  ENTREGADA
+}
+
+enum SampleStatus {
+  RECIBIDA
+  EN_ANALISIS
+  ANALIZADA
+  DESCARTADA
+}
+
+enum AnalysisResultStatus {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADO
+  VERIFICADO
+}
+
+enum ReportStatus {
+  BORRADOR
+  EMITIDO
+  ENVIADO
+}
+
+enum StorageCondition {
+  REFRIGERACION
+  CONGELACION
+  AMBIENTE
+}
+
+enum AnalysisArea {
+  FISICOQUIMICA
+  MICROBIOLOGIA
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          UserRole  @default(CLIENTE)
+  active        Boolean   @default(true)
+  phone         String?
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  createdRequests    AnalysisRequest[]  @relation("RequestCreator")
+  assignedSamples    Sample[]           @relation("SampleAnalyst")
+  analysisResults    AnalysisResult[]   @relation("ResultAnalyst")
+  verifiedResults    AnalysisResult[]   @relation("ResultVerifier")
+  createdReports     Report[]           @relation("ReportCreator")
+  auditLogs          AuditLog[]         @relation("AuditUser")
+  createdQuotes      Quote[]            @relation("QuoteCreator")
+  clientAccount      Client?            @relation("ClientUser")
+
+  @@index([role])
+  @@index([email])
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  ruc           String?   @unique
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  clientType    String    @default("EMPRESA") // EMPRESA, PERSONA
+  contactName   String?
+  contactPhone  String?
+  contactEmail  String?
+  notes         String?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Link to user account (optional)
+  userId        String?   @unique
+  user          User?     @relation("ClientUser", fields: [userId], references: [id])
+
+  // Relations
+  requests      AnalysisRequest[]
+  quotes        Quote[]
+  workOrders    WorkOrder[]
+
+  @@index([name])
+  @@index([ruc])
+}
+
+model AnalysisType {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  name            String
+  area            AnalysisArea
+  description     String?
+  method          String?       // Método de referencia / norma
+  basePrice       Float         @default(0)
+  estimatedDays   Int           @default(5)
+  detectionLimit  String?
+  unit            String?
+  minValue        Float?
+  maxValue        Float?
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  groupItems      AnalysisGroupItem[]
+  requestItems    RequestItem[]
+  quoteItems      QuoteItem[]
+  workOrderItems  WorkOrderItem[]
+  results         AnalysisResult[]
+
+  @@index([area])
+  @@index([code])
+}
+
+model AnalysisGroup {
+  id          String    @id @default(cuid())
+  name        String
+  code        String    @unique
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items       AnalysisGroupItem[]
+}
+
+model AnalysisGroupItem {
+  id              String        @id @default(cuid())
+  groupId         String
+  analysisTypeId  String
+
+  group           AnalysisGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  analysisType    AnalysisType  @relation(fields: [analysisTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, analysisTypeId])
+}
+
+model SampleType {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  requests    AnalysisRequest[]
+  samples     Sample[]
+}
+
+model AnalysisRequest {
+  id            String        @id @default(cuid())
+  requestNumber String        @unique
+  clientId      String
+  sampleTypeId  String?
+  description   String?
+  observations  String?
+  urgent        Boolean       @default(false)
+  status        RequestStatus @default(BORRADOR)
+
+  // Ficha de ingreso: datos del producto/muestra
+  productName        String?
+  brand              String?
+  lot                String?
+  elaborationDate    DateTime?
+  expirationDate     DateTime?
+  samplingDate       DateTime?
+  receptionDate      DateTime?
+  packaging          String?
+  contentAmount      String?
+  location           String?
+  sampleCount        Int?
+  storageCondition   String?
+  samplingBy         String?
+  responsibleName    String?
+  invoiceEmail       String?
+  reportEmail        String?
+
+  createdById   String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  client        Client        @relation(fields: [clientId], references: [id])
+  sampleType    SampleType?   @relation(fields: [sampleTypeId], references: [id])
+  createdBy     User          @relation("RequestCreator", fields: [createdById], references: [id])
+
+  items         RequestItem[]
+  quote         Quote?
+
+  @@index([status])
+  @@index([clientId])
+  @@index([createdAt])
+}
+
+model RequestItem {
+  id              String          @id @default(cuid())
+  requestId       String
+  analysisTypeId  String
+  quantity        Int             @default(1)
+  notes           String?
+
+  request         AnalysisRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  analysisType    AnalysisType    @relation(fields: [analysisTypeId], references: [id])
+
+  @@unique([requestId, analysisTypeId])
+}
+
+model Quote {
+  id              String      @id @default(cuid())
+  quoteNumber     String      @unique
+  requestId       String      @unique
+  clientId        String
+  subtotal        Float       @default(0)
+  discount        Float       @default(0)
+  taxRate         Float       @default(12)  // IVA Ecuador
+  taxAmount       Float       @default(0)
+  total           Float       @default(0)
+  validDays       Int         @default(15)
+  notes           String?
+  conditions      String?
+  status          QuoteStatus @default(BORRADOR)
+  sentAt          DateTime?
+  acceptedAt      DateTime?
+  createdById     String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  request         AnalysisRequest @relation(fields: [requestId], references: [id])
+  client          Client          @relation(fields: [clientId], references: [id])
+  createdBy       User            @relation("QuoteCreator", fields: [createdById], references: [id])
+
+  items           QuoteItem[]
+  workOrder       WorkOrder?
+
+  @@index([status])
+  @@index([clientId])
+  @@index([createdAt])
+}
+
+model QuoteItem {
+  id              String       @id @default(cuid())
+  quoteId         String
+  analysisTypeId  String
+  quantity        Int          @default(1)
+  unitPrice       Float
+  totalPrice      Float
+  notes           String?
+
+  quote           Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  analysisType    AnalysisType @relation(fields: [analysisTypeId], references: [id])
+
+  @@unique([quoteId, analysisTypeId])
+}
+
+model WorkOrder {
+  id                String          @id @default(cuid())
+  orderNumber       String          @unique
+  quoteId           String          @unique
+  clientId          String
+  status            WorkOrderStatus @default(ABIERTA)
+  receivedAt        DateTime        @default(now())
+  estimatedDelivery DateTime?
+  completedAt       DateTime?
+  deliveredAt       DateTime?
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  quote             Quote           @relation(fields: [quoteId], references: [id])
+  client            Client          @relation(fields: [clientId], references: [id])
+
+  items             WorkOrderItem[]
+  samples           Sample[]
+  reports           Report[]
+
+  @@index([status])
+  @@index([clientId])
+  @@index([createdAt])
+}
+
+model WorkOrderItem {
+  id              String        @id @default(cuid())
+  workOrderId     String
+  analysisTypeId  String
+  area            AnalysisArea
+  quantity        Int           @default(1)
+
+  workOrder       WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  analysisType    AnalysisType  @relation(fields: [analysisTypeId], references: [id])
+
+  @@unique([workOrderId, analysisTypeId])
+}
+
+model Sample {
+  id                  String           @id @default(cuid())
+  sampleCode          String           @unique
+  workOrderId         String
+  sampleTypeId        String?
+  description         String?
+  quantity            String?
+  unit                String?
+  receptionCondition  String?
+  storageCondition    StorageCondition @default(AMBIENTE)
+  area                AnalysisArea     @default(FISICOQUIMICA)
+  status              SampleStatus     @default(RECIBIDA)
+  analystId           String?
+  receivedAt          DateTime         @default(now())
+  analyzedAt          DateTime?
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  workOrder           WorkOrder        @relation(fields: [workOrderId], references: [id])
+  sampleType          SampleType?      @relation(fields: [sampleTypeId], references: [id])
+  analyst             User?            @relation("SampleAnalyst", fields: [analystId], references: [id])
+
+  results             AnalysisResult[]
+
+  @@index([workOrderId])
+  @@index([status])
+  @@index([area])
+  @@index([analystId])
+  @@index([receivedAt])
+}
+
+model AnalysisResult {
+  id              String               @id @default(cuid())
+  sampleId        String
+  analysisTypeId  String
+  value           String?
+  numericValue    Float?
+  unit            String?
+  method          String?
+  observations    String?
+  outOfRange      Boolean              @default(false)
+  status          AnalysisResultStatus @default(PENDIENTE)
+  analystId       String?
+  verifiedById    String?
+  analyzedAt      DateTime?
+  verifiedAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  sample          Sample               @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  analysisType    AnalysisType         @relation(fields: [analysisTypeId], references: [id])
+  analyst         User?                @relation("ResultAnalyst", fields: [analystId], references: [id])
+  verifiedBy      User?                @relation("ResultVerifier", fields: [verifiedById], references: [id])
+
+  @@unique([sampleId, analysisTypeId])
+  @@index([status])
+  @@index([analystId])
+}
+
+model Report {
+  id            String       @id @default(cuid())
+  reportNumber  String       @unique
+  workOrderId   String
+  status        ReportStatus @default(BORRADOR)
+  pdfUrl        String?
+  notes         String?
+  conclusions   String?
+  observations  String?
+  analystName   String?
+  directorName  String?
+  createdById   String
+  emittedAt     DateTime?
+  sentAt        DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  workOrder     WorkOrder    @relation(fields: [workOrderId], references: [id])
+  createdBy     User         @relation("ReportCreator", fields: [createdById], references: [id])
+
+  @@index([workOrderId])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String   // CREATE, UPDATE, STATUS_CHANGE, LOGIN, LOGOUT, PRINT_LABEL, GENERATE_REPORT, etc.
+  entity      String   // REQUEST, QUOTE, WORK_ORDER, SAMPLE, RESULT, REPORT, USER, CLIENT, etc.
+  entityId    String?
+  details     String?  // JSON string with before/after or additional info
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation("AuditUser", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity])
+  @@index([entityId])
+  @@index([createdAt])
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  label     String?
+  category  String   @default("GENERAL")
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+}
+
+model Counter {
+  id        String   @id @default(cuid())
+  key       String   @unique // OT, COT, MUE, SOL, REP
+  prefix    String
+  year      Int
+  sequence  Int      @default(0)
+  updatedAt DateTime @updatedAt
+}

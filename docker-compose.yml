@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: labolab
+      POSTGRES_PASSWORD: labolab
+      POSTGRES_DB: labolab_lims
+    ports:
+      - "5432:5432"
+    volumes:
+      - labolab_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labolab -d labolab_lims"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://labolab:labolab@db:5432/labolab_lims?schema=public"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:-adu2BZqZ9hY2+Eq/x9xYFqAbalskRtmnFbRwPnwrj8M=}"
+      # Opcional: solo para generación de PDFs e IA
+      ABACUSAI_API_KEY: ""
+      NODE_ENV: "development"
+    ports:
+      - "3000:3000"
+    volumes:
+      # Monta el código para hot-reload durante el desarrollo.
+      - .:/app
+      # Mantiene node_modules de la imagen (no los sobreescribe el bind mount).
+      - /app/node_modules
+
+volumes:
+  labolab_db_data:
