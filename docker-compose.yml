@@ -35,6 +35,8 @@ services:
       - .:/app
       # Mantiene node_modules de la imagen (no los sobreescribe el bind mount).
       - /app/node_modules
+      # Aísla la caché de compilación en el disco rápido de Linux (evita cuello de botella en Windows)
+      - /app/.next
 
 volumes:
   labolab_db_data:

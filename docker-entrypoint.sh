@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+echo "==> Verificando dependencias..."
+yarn install --immutable || yarn install
+
 echo "==> Esperando a la base de datos y aplicando el esquema (prisma db push)..."
 ATTEMPTS=0
 until yarn prisma db push --skip-generate; do
