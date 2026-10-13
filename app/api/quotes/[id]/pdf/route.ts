@@ -19,7 +19,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
         request: {
           include: { items: { include: { analysisType: true } } },
         },
-        items: { include: { analysisType: true } },
+        links: {
+          include: {
+            request: { select: { requestNumber: true, productName: true, lot: true, description: true, sampleCount: true } },
+          },
+        },
+        items: {
+          include: {
+            analysisType: true,
+            request: { select: { requestNumber: true, productName: true, lot: true, description: true } },
+          },
+        },
         createdBy: { select: { name: true } },
       },
     });
@@ -35,7 +45,22 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const client = quote.client;
     const req = quote.request;
-    const sampleCount = req?.sampleCount ?? 1;
+    const linkedSamples = (quote.links ?? []).map((link: any) => link?.request).filter(Boolean);
+    const samplesForPdf = linkedSamples.length ? linkedSamples : (req ? [req] : []);
+    const sampleCount = samplesForPdf.reduce((sum: number, sample: any) => sum + (sample?.sampleCount ?? 1), 0) || 1;
+    const presentationText = quote.presentation === 'CONSOLIDADA' ? 'Paquete consolidado' : 'Detallada por muestra';
+    const esc = (value: unknown) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    const sampleSummary = samplesForPdf
+      .map((sample: any) => {
+        const name = esc(sample?.productName || sample?.description || 'Muestra');
+        const lot = sample?.lot ? ` (Lote ${esc(sample.lot)})` : '';
+        return `${esc(sample?.requestNumber ?? '')} — ${name}${lot}`;
+      })
+      .join('<br/>');
 
     // Build items table
     let itemsHtml = '';
@@ -67,7 +92,25 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return html;
     };
 
-    itemsHtml = renderItems(fqItems, 'FÍSICO QUÍMICOS') + renderItems(micaItems, 'MICROBIOLÓGICOS');
+    const multiDetailed = quote.presentation === 'DETALLADA' && samplesForPdf.length > 1;
+    if (multiDetailed) {
+      const groups = new Map<string, { label: string; items: any[] }>();
+      for (const item of quote.items ?? []) {
+        const key = item?.requestId ?? item?.notes ?? 'muestra';
+        if (!groups.has(key)) {
+          groups.set(key, { label: item?.notes || item?.request?.productName || 'Muestra', items: [] });
+        }
+        groups.get(key)!.items.push(item);
+      }
+      for (const group of groups.values()) {
+        itemsHtml += `<tr><td colspan="7" style="background:#fff7ed;font-weight:bold;color:#9a3412;font-size:10px;padding:6px 8px;">MUESTRA: ${esc(group.label)}</td></tr>`;
+        const fq = group.items.filter((item: any) => item?.analysisType?.area === 'FISICOQUIMICA');
+        const mica = group.items.filter((item: any) => item?.analysisType?.area === 'MICROBIOLOGIA');
+        itemsHtml += renderItems(fq, 'FÍSICO QUÍMICOS') + renderItems(mica, 'MICROBIOLÓGICOS');
+      }
+    } else {
+      itemsHtml = renderItems(fqItems, 'FÍSICO QUÍMICOS') + renderItems(micaItems, 'MICROBIOLÓGICOS');
+    }
 
     const dateStr = new Date().toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil', day: '2-digit', month: 'long', year: 'numeric' });
     const validUntil = new Date();
@@ -132,8 +175,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
     <div class="info-box">
       <h4>Datos de la Proforma</h4>
       <div class="info-row"><span class="info-label">Fecha:</span><span class="info-value">${dateStr}</span></div>
-      <div class="info-row"><span class="info-label">Solicitud:</span><span class="info-value">${req?.requestNumber ?? '-'}</span></div>
-      <div class="info-row"><span class="info-label">Muestra:</span><span class="info-value">${req?.productName ?? req?.description ?? '-'}</span></div>
+      <div class="info-row"><span class="info-label">Solicitud:</span><span class="info-value">${esc(samplesForPdf.map((sample: any) => sample?.requestNumber).filter(Boolean).join(', ') || req?.requestNumber || '-')}</span></div>
+      <div class="info-row"><span class="info-label">Muestra:</span><span class="info-value">${sampleSummary || '-'}</span></div>
+      <div class="info-row"><span class="info-label">Presentación:</span><span class="info-value">${presentationText}</span></div>
       <div class="info-row"><span class="info-label">N° Muestras:</span><span class="info-value">${sampleCount}</span></div>
       <div class="info-row"><span class="info-label">Vigencia:</span><span class="info-value">${quote.validDays} días (hasta ${validStr})</span></div>
     </div>

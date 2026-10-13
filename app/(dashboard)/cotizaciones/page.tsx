@@ -64,7 +64,11 @@ export default function CotizacionesPage() {
   const columns: Column<any>[] = [
     { key: 'quoteNumber', label: 'N°', render: (q: any) => <span className="font-mono text-xs">{q?.quoteNumber ?? ''}</span> },
     { key: 'client', label: 'Cliente', render: (q: any) => q?.client?.name ?? '-' },
-    { key: 'request', label: 'Solicitud', render: (q: any) => <span className="font-mono text-xs">{q?.request?.requestNumber ?? '-'}</span> },
+    { key: 'request', label: 'Solicitud', render: (q: any) => {
+      const numbers = (q?.links ?? []).map((link: any) => link?.request?.requestNumber).filter(Boolean);
+      const label = numbers.length ? numbers.join(', ') : (q?.request?.requestNumber ?? '-');
+      return <span className="font-mono text-xs">{label}</span>;
+    } },
     { key: 'items', label: 'Ítems', render: (q: any) => q?.items?.length ?? 0 },
     { key: 'total', label: 'Total', render: (q: any) => `$${(q?.total ?? 0).toFixed(2)}` },
     { key: 'status', label: 'Estado', render: (q: any) => <StatusBadge status={q?.status ?? ''} /> },

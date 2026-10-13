@@ -78,9 +78,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         },
       });
 
-      // Update request status
-      await prisma.analysisRequest.update({
-        where: { id: quote.requestId },
+      const links = await prisma.quoteRequest.findMany({
+        where: { quoteId: quote.id },
+        select: { requestId: true },
+      });
+      const requestIds = [...new Set([quote.requestId, ...links.map((link) => link.requestId)])];
+      await prisma.analysisRequest.updateMany({
+        where: { id: { in: requestIds } },
         data: { status: 'CONFIRMADA' },
       });
 
