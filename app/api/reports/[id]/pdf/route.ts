@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import QRCode from 'qrcode';
 import { createLocalPdfJob } from '@/lib/pdf';
+import { storageConditionLabel } from '@/lib/storage-condition';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -163,7 +164,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     </div>
     <div class="info-box">
       <h4>Recepción</h4>
-      <div class="info-row"><span class="info-label">Conservación:</span><span class="info-value">${req.storageCondition ?? '-'}</span></div>
+      <div class="info-row"><span class="info-label">Conservación:</span><span class="info-value">${storageConditionLabel(req.storageCondition) || '-'}</span></div>
       <div class="info-row"><span class="info-label">Contenido:</span><span class="info-value">${req.contentAmount ?? '-'}</span></div>
       <div class="info-row"><span class="info-label">N° Muestras:</span><span class="info-value">${req.sampleCount ?? samples.length ?? '-'}</span></div>
     </div>

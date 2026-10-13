@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import { createLocalPdfJob } from '@/lib/pdf';
+import { storageConditionLabel } from '@/lib/storage-condition';
 
 function fmtDate(d: any) {
   if (!d) return '';
@@ -95,7 +96,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     <tr><td class="lbl">Muestra</td><td>${sampleType}</td><td class="lbl">Descripción de la muestra</td><td>${sampleDesc}</td></tr>
     <tr><td class="lbl">Marca / Lote</td><td>${[req.brand, req.lot].filter(Boolean).join(' / ') || '-'}</td><td class="lbl">N° de muestras</td><td>${req.sampleCount ?? workOrder.samples?.length ?? '-'}</td></tr>
     <tr><td class="lbl">Envase</td><td>${req.packaging ?? '-'}</td><td class="lbl">Contenido</td><td>${req.contentAmount ?? '-'}</td></tr>
-    <tr><td class="lbl">Condiciones de conservación</td><td>${req.storageCondition ?? '-'}</td><td class="lbl">Toma de muestra por</td><td>${req.samplingBy ?? req.responsibleName ?? '-'}</td></tr>
+    <tr><td class="lbl">Condiciones de conservación</td><td>${storageConditionLabel(req.storageCondition) || '-'}</td><td class="lbl">Toma de muestra por</td><td>${req.samplingBy ?? req.responsibleName ?? '-'}</td></tr>
     <tr><td class="lbl">Fecha elaboración</td><td>${fmtDate(req.elaborationDate) || '-'}</td><td class="lbl">Fecha vencimiento</td><td>${fmtDate(req.expirationDate) || '-'}</td></tr>
   </table>
 

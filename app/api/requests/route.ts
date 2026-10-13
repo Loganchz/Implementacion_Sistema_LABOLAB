@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
+import { checkIntake } from '@/lib/intake-rules';
 import { getNextNumber } from '@/lib/counters';
 import { getSessionClient } from '@/lib/portal';
 
@@ -36,7 +37,31 @@ export async function GET(request: Request) {
           client: { select: { name: true } },
           sampleType: { select: { name: true } },
           createdBy: { select: { name: true } },
-          items: { include: { analysisType: { select: { name: true, code: true, area: true } } } },
+          items: { include: { analysisType: { select: { id: true, name: true, code: true, area: true, basePrice: true } } } },
+          quote: {
+            include: {
+              workOrder: {
+                include: {
+                  samples: { select: { status: true, sampleCode: true } },
+                  reports: { select: { id: true, status: true } },
+                },
+              },
+            },
+          },
+          quoteLinks: {
+            include: {
+              quote: {
+                include: {
+                  workOrder: {
+                    include: {
+                      samples: { select: { status: true, sampleCode: true } },
+                      reports: { select: { id: true, status: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
@@ -80,6 +105,14 @@ export async function POST(request: Request) {
 
     if (!clientId) return NextResponse.json({ error: 'Cliente requerido' }, { status: 400 });
 
+    const fullIntake = Object.prototype.hasOwnProperty.call(body ?? {}, 'productName');
+    let normalizedSampleCount = sampleCount;
+    if (fullIntake) {
+      const check = checkIntake({ clientId, sampleTypeId, productName, lot, sampleCount, receptionDate, analysisTypeIds });
+      if (!check.ok) return NextResponse.json({ error: check.messages[0] }, { status: 400 });
+      normalizedSampleCount = check.sampleCount;
+    }
+
     const requestNumber = await getNextNumber('SOL');
 
     const newRequest = await prisma.analysisRequest.create({
@@ -101,7 +134,7 @@ export async function POST(request: Request) {
         packaging: packaging || null,
         contentAmount: contentAmount || null,
         location: location || null,
-        sampleCount: sampleCount ? parseInt(String(sampleCount)) : null,
+        sampleCount: normalizedSampleCount ? parseInt(String(normalizedSampleCount), 10) : null,
         storageCondition: storageCondition || null,
         samplingBy: samplingBy || null,
         responsibleName: responsibleName || null,
