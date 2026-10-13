@@ -28,6 +28,9 @@ services:
       NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:-adu2BZqZ9hY2+Eq/x9xYFqAbalskRtmnFbRwPnwrj8M=}"
       PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium"
       NODE_ENV: "development"
+      # Windows no emite eventos de archivo hacia el contenedor; sin esto Next no recompila al guardar.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
     ports:
       - "3000:3000"
     volumes:
