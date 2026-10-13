@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { getRoleLabel } from '@/lib/permissions';
 
+import { useSidebar } from '@/components/sidebar-context';
+
 interface NavItem {
   label: string;
   href: string;
@@ -58,7 +60,7 @@ const clientNavItems: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggleCollapsed } = useSidebar();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const { data: session } = useSession() || {};
@@ -76,6 +78,7 @@ export function Sidebar() {
       <button
         onClick={() => setMobileOpen(true)}
         className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-md text-[#005F9E]"
+        aria-label="Abrir menú"
       >
         <Menu className="w-5 h-5" />
       </button>
@@ -91,38 +94,52 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full bg-white border-r border-gray-200 z-50 flex flex-col transition-all duration-300',
+          'fixed top-0 left-0 h-full bg-white border-r border-gray-200 z-50 flex flex-col transition-all duration-300 shadow-sm',
           collapsed ? 'w-[68px]' : 'w-[250px]',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-100">
-          {!collapsed && (
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <FlaskConical className="w-7 h-7 text-[#00AEEF]" />
-              <span className="font-display font-bold text-lg text-[#005F9E] tracking-tight">
-                LABOLAB
-              </span>
-            </Link>
-          )}
-          {collapsed && (
-            <Link href="/dashboard" className="mx-auto">
-              <FlaskConical className="w-7 h-7 text-[#00AEEF]" />
-            </Link>
+        <div className="flex items-center justify-between h-16 px-3 border-b border-gray-100">
+          {!collapsed ? (
+            <>
+              <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden pl-1">
+                <FlaskConical className="w-7 h-7 text-[#00AEEF] shrink-0" />
+                <span className="font-display font-bold text-lg text-[#005F9E] tracking-tight">
+                  LABOLAB
+                </span>
+              </Link>
+              <button
+                onClick={toggleCollapsed}
+                className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-[#005F9E] hover:bg-gray-100 transition-colors"
+                title="Contraer menú lateral"
+                aria-label="Contraer menú"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </>
+          ) : (
+            <div className="w-full flex items-center justify-center">
+              <button
+                onClick={toggleCollapsed}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-[#005F9E] hover:bg-gray-100 transition-colors"
+                title="Expandir menú lateral"
+                aria-label="Expandir menú"
+              >
+                <FlaskConical className="w-7 h-7 text-[#00AEEF]" />
+              </button>
+            </div>
           )}
           <button
-            onClick={() => {
-              setMobileOpen(false);
-            }}
-            className="lg:hidden text-gray-400 hover:text-gray-600"
+            onClick={() => setMobileOpen(false)}
+            className="lg:hidden text-gray-400 hover:text-gray-600 p-1"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
           {items.map((item: NavItem) => {
             const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
             const Icon = item.icon;
@@ -132,15 +149,16 @@ export function Sidebar() {
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group relative',
+                  collapsed && 'justify-center px-0',
                   isActive
                     ? 'bg-[#00AEEF]/10 text-[#005F9E]'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 )}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon className={cn('w-5 h-5 shrink-0', isActive ? 'text-[#00AEEF]' : '')} />
-                {!collapsed && <span>{item.label}</span>}
+                <Icon className={cn('w-5 h-5 shrink-0', isActive ? 'text-[#00AEEF]' : 'text-gray-500 group-hover:text-gray-700')} />
+                {!collapsed && <span className="truncate">{item.label}</span>}
               </Link>
             );
           })}
@@ -162,7 +180,7 @@ export function Sidebar() {
             onClick={() => signOut({ callbackUrl: '/login' })}
             className={cn(
               'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors',
-              collapsed && 'justify-center'
+              collapsed && 'justify-center px-0'
             )}
             title="Cerrar Sesión"
           >
@@ -171,10 +189,12 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Collapse toggle (desktop only) */}
+        {/* Collapse toggle (desktop only at bottom) */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="hidden lg:flex items-center justify-center h-10 border-t border-gray-100 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+          onClick={toggleCollapsed}
+          className="hidden lg:flex items-center justify-center h-10 border-t border-gray-100 text-gray-400 hover:text-[#005F9E] hover:bg-gray-50 transition-colors"
+          title={collapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'}
+          aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
