@@ -32,6 +32,11 @@ enum QuoteStatus {
   VENCIDA
 }
 
+enum QuotePresentation {
+  DETALLADA
+  CONSOLIDADA
+}
+
 enum WorkOrderStatus {
   ABIERTA
   EN_PROCESO
@@ -227,6 +232,8 @@ model AnalysisRequest {
 
   items         RequestItem[]
   quote         Quote?
+  quoteLinks    QuoteRequest[]
+  quoteItems    QuoteItem[]
 
   @@index([status])
   @@index([clientId])
@@ -259,6 +266,7 @@ model Quote {
   validDays       Int         @default(15)
   notes           String?
   conditions      String?
+  presentation    QuotePresentation @default(DETALLADA)
   status          QuoteStatus @default(BORRADOR)
   sentAt          DateTime?
   acceptedAt      DateTime?
@@ -271,6 +279,7 @@ model Quote {
   createdBy       User            @relation("QuoteCreator", fields: [createdById], references: [id])
 
   items           QuoteItem[]
+  links           QuoteRequest[]
   workOrder       WorkOrder?
 
   @@index([status])
@@ -278,19 +287,33 @@ model Quote {
   @@index([createdAt])
 }
 
+model QuoteRequest {
+  id         String          @id @default(cuid())
+  quoteId    String
+  requestId  String          @unique
+  quote      Quote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  request    AnalysisRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
 model QuoteItem {
   id              String       @id @default(cuid())
   quoteId         String
   analysisTypeId  String
+  requestId       String?
+  // Distingue el mismo ensayo en muestras distintas. "PKG" agrupa el paquete consolidado.
+  scopeKey        String       @default("legacy")
   quantity        Int          @default(1)
   unitPrice       Float
   totalPrice      Float
   notes           String?
 
-  quote           Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  analysisType    AnalysisType @relation(fields: [analysisTypeId], references: [id])
+  quote           Quote            @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  analysisType    AnalysisType     @relation(fields: [analysisTypeId], references: [id])
+  request         AnalysisRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
 
-  @@unique([quoteId, analysisTypeId])
+  @@unique([quoteId, analysisTypeId, scopeKey])
 }
 
 model WorkOrder {
