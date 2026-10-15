@@ -7,7 +7,9 @@ import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import { getSessionClient } from '@/lib/portal';
 import { hasPermission } from '@/lib/permissions';
-import { checkIntake } from '@/lib/intake-rules';
+import { checkIntake, issueFromServer } from '@/lib/intake-rules';
+import { quoteClientMismatch } from '@/lib/quote-client';
+import { joinStorageConditions, normalizeStorageCondition, storageConditionCodes } from '@/lib/storage-condition';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -44,25 +46,43 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       status, description, observations, urgent, sampleTypeId, clientId, analysisTypeIds,
       productName, brand, lot, elaborationDate, expirationDate, samplingDate, receptionDate,
       packaging, contentAmount, location, sampleCount, storageCondition, samplingBy,
-      responsibleName, invoiceEmail, reportEmail,
+      responsibleName, invoiceEmail, reportEmail, quoteNumber, isSanitaryNotification,
+      packagingMaterial, servingSize, shelfLife, dilution, hasCustomAnalyses, customAnalyses,
     } = body ?? {};
 
     const current = await prisma.analysisRequest.findUnique({
       where: { id: params.id },
-      select: { status: true },
+      select: { status: true, clientId: true },
     });
     if (!current) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
 
     const editingIntake = productName !== undefined || Array.isArray(analysisTypeIds);
     if (editingIntake && current.status !== 'BORRADOR') {
-      return NextResponse.json({ error: 'Solo se puede editar una solicitud en borrador' }, { status: 409 });
+      const blocked = 'Solo se puede editar una solicitud en borrador. Esta ya avanzó y solo se puede consultar.';
+      return NextResponse.json({ error: blocked, issues: [issueFromServer(blocked)] }, { status: 409 });
     }
 
     let normalizedSampleCount = sampleCount;
     if (productName !== undefined) {
-      const check = checkIntake({ clientId, sampleTypeId, productName, lot, sampleCount, receptionDate, analysisTypeIds });
-      if (!check.ok) return NextResponse.json({ error: check.messages[0] }, { status: 400 });
+      const check = checkIntake({
+        clientId,
+        sampleTypeId,
+        productName,
+        lot,
+        sampleCount,
+        receptionDate,
+        storageCondition,
+        analysisTypeIds,
+        hasCustomAnalyses: Boolean(hasCustomAnalyses),
+        customAnalyses: customAnalyses ?? [],
+      });
+      if (!check.ok) return NextResponse.json({ error: check.messages[0], issues: check.issues }, { status: 400 });
       normalizedSampleCount = check.sampleCount;
+    }
+
+    if (quoteNumber !== undefined) {
+      const quoteError = await quoteClientMismatch(quoteNumber, clientId || current.clientId);
+      if (quoteError) return NextResponse.json({ error: quoteError, issues: [issueFromServer(quoteError)] }, { status: 400 });
     }
 
     const textOrNull = (value: unknown) => {
@@ -70,6 +90,12 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       if (value === null) return null;
       const text = String(value).trim();
       return text ? text : null;
+    };
+    const textOrNA = (value: unknown) => {
+      if (value === undefined) return undefined;
+      if (value === null) return 'N/A';
+      const text = String(value).trim();
+      return text ? text : 'N/A';
     };
     const dateOrNull = (value: unknown) => {
       if (value === undefined) return undefined;
@@ -84,26 +110,46 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         data: {
           ...(status ? { status } : {}),
           ...(clientId ? { clientId } : {}),
-          ...(description !== undefined ? { description: textOrNull(description) } : {}),
-          ...(observations !== undefined ? { observations: textOrNull(observations) } : {}),
+          ...(description !== undefined ? { description: productName !== undefined ? textOrNA(description) : textOrNull(description) } : {}),
+          ...(observations !== undefined ? { observations: productName !== undefined ? textOrNA(observations) : textOrNull(observations) } : {}),
           ...(urgent !== undefined ? { urgent: !!urgent } : {}),
           ...(sampleTypeId !== undefined ? { sampleTypeId: sampleTypeId || null } : {}),
           ...(productName !== undefined ? { productName: textOrNull(productName) } : {}),
-          ...(brand !== undefined ? { brand: textOrNull(brand) } : {}),
-          ...(lot !== undefined ? { lot: textOrNull(lot) } : {}),
+          ...(brand !== undefined ? { brand: textOrNA(brand) } : {}),
+          ...(lot !== undefined ? { lot: textOrNA(lot) } : {}),
           ...(elaborationDate !== undefined ? { elaborationDate: dateOrNull(elaborationDate) } : {}),
           ...(expirationDate !== undefined ? { expirationDate: dateOrNull(expirationDate) } : {}),
           ...(samplingDate !== undefined ? { samplingDate: dateOrNull(samplingDate) } : {}),
           ...(receptionDate !== undefined ? { receptionDate: dateOrNull(receptionDate) } : {}),
-          ...(packaging !== undefined ? { packaging: textOrNull(packaging) } : {}),
-          ...(contentAmount !== undefined ? { contentAmount: textOrNull(contentAmount) } : {}),
-          ...(location !== undefined ? { location: textOrNull(location) } : {}),
-          ...(sampleCount !== undefined ? { sampleCount: normalizedSampleCount ? parseInt(String(normalizedSampleCount), 10) : null } : {}),
-          ...(storageCondition !== undefined ? { storageCondition: textOrNull(storageCondition) } : {}),
-          ...(samplingBy !== undefined ? { samplingBy: textOrNull(samplingBy) } : {}),
-          ...(responsibleName !== undefined ? { responsibleName: textOrNull(responsibleName) } : {}),
-          ...(invoiceEmail !== undefined ? { invoiceEmail: textOrNull(invoiceEmail) } : {}),
-          ...(reportEmail !== undefined ? { reportEmail: textOrNull(reportEmail) } : {}),
+          ...(packaging !== undefined ? { packaging: productName !== undefined ? textOrNA(packaging) : textOrNull(packaging) } : {}),
+          ...(contentAmount !== undefined ? { contentAmount: productName !== undefined ? textOrNA(contentAmount) : textOrNull(contentAmount) } : {}),
+          ...(location !== undefined ? { location: textOrNA(location) } : {}),
+          ...(sampleCount !== undefined ? { sampleCount: normalizedSampleCount ? parseInt(String(normalizedSampleCount), 10) : 1 } : {}),
+          ...(storageCondition !== undefined ? {
+            storageCondition: productName !== undefined
+              ? joinStorageConditions(storageConditionCodes(typeof storageCondition === 'string' ? storageCondition : ''))
+              : normalizeStorageCondition(storageCondition),
+          } : {}),
+          ...(samplingBy !== undefined ? { samplingBy: productName !== undefined ? textOrNA(samplingBy) : textOrNull(samplingBy) } : {}),
+          ...(responsibleName !== undefined ? { responsibleName: productName !== undefined ? textOrNA(responsibleName) : textOrNull(responsibleName) } : {}),
+          ...(invoiceEmail !== undefined ? { invoiceEmail: productName !== undefined ? textOrNA(invoiceEmail) : textOrNull(invoiceEmail) } : {}),
+          ...(reportEmail !== undefined ? { reportEmail: productName !== undefined ? textOrNA(reportEmail) : textOrNull(reportEmail) } : {}),
+
+          // Nuevos campos oficiales
+          ...(quoteNumber !== undefined ? { quoteNumber: textOrNA(quoteNumber) } : {}),
+          ...(isSanitaryNotification !== undefined ? { isSanitaryNotification: Boolean(isSanitaryNotification) } : {}),
+          ...(packagingMaterial !== undefined ? { packagingMaterial: textOrNA(packagingMaterial) } : {}),
+          ...(servingSize !== undefined ? { servingSize: textOrNA(servingSize) } : {}),
+          ...(shelfLife !== undefined ? { shelfLife: textOrNA(shelfLife) } : {}),
+          ...(dilution !== undefined ? { dilution: textOrNA(dilution) } : {}),
+          ...(hasCustomAnalyses !== undefined ? { hasCustomAnalyses: Boolean(hasCustomAnalyses) } : {}),
+          ...(customAnalyses !== undefined ? {
+            customAnalyses: Array.isArray(customAnalyses)
+              ? customAnalyses
+                  .filter((row: any) => String(row?.analysis ?? '').trim())
+                  .map((row: any) => ({ analysis: textOrNA(row?.analysis), technique: textOrNA(row?.technique) }))
+              : undefined,
+          } : {}),
         },
       });
 

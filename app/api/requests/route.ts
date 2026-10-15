@@ -5,9 +5,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
-import { checkIntake } from '@/lib/intake-rules';
+import { checkIntake, issueFromServer } from '@/lib/intake-rules';
 import { getNextNumber } from '@/lib/counters';
 import { getSessionClient } from '@/lib/portal';
+import { quoteClientMismatch } from '@/lib/quote-client';
+import { joinStorageConditions, normalizeStorageCondition, storageConditionCodes } from '@/lib/storage-condition';
 
 export async function GET(request: Request) {
   try {
@@ -89,7 +91,16 @@ export async function POST(request: Request) {
       productName, brand, lot, elaborationDate, expirationDate, samplingDate,
       receptionDate, packaging, contentAmount, location, sampleCount,
       storageCondition, samplingBy, responsibleName, invoiceEmail, reportEmail,
+      quoteNumber, isSanitaryNotification, packagingMaterial, servingSize,
+      shelfLife, dilution, hasCustomAnalyses, customAnalyses,
     } = body ?? {};
+
+    // Helper: Si un campo descriptivo viene vacío o nulo, se guarda como 'N/A'
+    const toNA = (val: unknown): string => {
+      if (val === undefined || val === null) return 'N/A';
+      const text = String(val).trim();
+      return text || 'N/A';
+    };
 
     // Portal self-service: el CLIENTE crea solicitudes para su propia cuenta
     // y quedan ENVIADAS para que aparezcan de inmediato al equipo del laboratorio.
@@ -105,11 +116,25 @@ export async function POST(request: Request) {
 
     if (!clientId) return NextResponse.json({ error: 'Cliente requerido' }, { status: 400 });
 
+    const quoteError = await quoteClientMismatch(quoteNumber, clientId);
+    if (quoteError) return NextResponse.json({ error: quoteError, issues: [issueFromServer(quoteError)] }, { status: 400 });
+
     const fullIntake = Object.prototype.hasOwnProperty.call(body ?? {}, 'productName');
     let normalizedSampleCount = sampleCount;
     if (fullIntake) {
-      const check = checkIntake({ clientId, sampleTypeId, productName, lot, sampleCount, receptionDate, analysisTypeIds });
-      if (!check.ok) return NextResponse.json({ error: check.messages[0] }, { status: 400 });
+      const check = checkIntake({
+        clientId,
+        sampleTypeId,
+        productName,
+        lot,
+        sampleCount,
+        receptionDate,
+        storageCondition,
+        analysisTypeIds,
+        hasCustomAnalyses: Boolean(hasCustomAnalyses),
+        customAnalyses: customAnalyses ?? [],
+      });
+      if (!check.ok) return NextResponse.json({ error: check.messages[0], issues: check.issues }, { status: 400 });
       normalizedSampleCount = check.sampleCount;
     }
 
@@ -120,26 +145,42 @@ export async function POST(request: Request) {
         requestNumber,
         clientId,
         sampleTypeId: sampleTypeId || null,
-        description: description || null,
-        observations: observations || null,
+        description: fullIntake ? toNA(description) : (description || null),
+        observations: fullIntake ? toNA(observations) : (observations ? String(observations).trim() : null),
         urgent: urgent || false,
         status,
-        productName: productName || null,
-        brand: brand || null,
-        lot: lot || null,
+        productName: productName ? String(productName).trim() : null,
+        brand: toNA(brand),
+        lot: toNA(lot),
         elaborationDate: elaborationDate ? new Date(elaborationDate) : null,
         expirationDate: expirationDate ? new Date(expirationDate) : null,
         samplingDate: samplingDate ? new Date(samplingDate) : null,
         receptionDate: receptionDate ? new Date(receptionDate) : null,
-        packaging: packaging || null,
-        contentAmount: contentAmount || null,
-        location: location || null,
-        sampleCount: normalizedSampleCount ? parseInt(String(normalizedSampleCount), 10) : null,
-        storageCondition: storageCondition || null,
-        samplingBy: samplingBy || null,
-        responsibleName: responsibleName || null,
-        invoiceEmail: invoiceEmail || null,
-        reportEmail: reportEmail || null,
+        packaging: fullIntake ? toNA(packaging) : (packaging ? String(packaging).trim() : null),
+        contentAmount: fullIntake ? toNA(contentAmount) : (contentAmount ? String(contentAmount).trim() : null),
+        location: toNA(location),
+        sampleCount: normalizedSampleCount ? parseInt(String(normalizedSampleCount), 10) : 1,
+        storageCondition: fullIntake
+          ? joinStorageConditions(storageConditionCodes(typeof storageCondition === 'string' ? storageCondition : ''))
+          : normalizeStorageCondition(storageCondition),
+        samplingBy: fullIntake ? toNA(samplingBy) : (samplingBy ? String(samplingBy).trim() : null),
+        responsibleName: fullIntake ? toNA(responsibleName) : (responsibleName ? String(responsibleName).trim() : null),
+        invoiceEmail: fullIntake ? toNA(invoiceEmail) : (invoiceEmail ? String(invoiceEmail).trim() : null),
+        reportEmail: fullIntake ? toNA(reportEmail) : (reportEmail ? String(reportEmail).trim() : null),
+
+        quoteNumber: fullIntake ? toNA(quoteNumber) : (quoteNumber ? String(quoteNumber).trim() : null),
+        isSanitaryNotification: Boolean(isSanitaryNotification),
+        packagingMaterial: fullIntake ? toNA(packagingMaterial) : null,
+        servingSize: fullIntake ? toNA(servingSize) : null,
+        shelfLife: fullIntake ? toNA(shelfLife) : null,
+        dilution: fullIntake ? toNA(dilution) : null,
+        hasCustomAnalyses: Boolean(hasCustomAnalyses),
+        customAnalyses: hasCustomAnalyses && Array.isArray(customAnalyses)
+          ? customAnalyses
+              .filter((row: any) => String(row?.analysis ?? '').trim())
+              .map((row: any) => ({ analysis: toNA(row?.analysis), technique: toNA(row?.technique) }))
+          : undefined,
+
         createdById: userId,
         items: {
           create: (analysisTypeIds ?? []).map((atId: string) => ({
@@ -159,12 +200,16 @@ export async function POST(request: Request) {
       action: 'CREATE',
       entity: 'REQUEST',
       entityId: newRequest.id,
-      details: `Solicitud ${requestNumber} creada para ${newRequest.client?.name ?? 'cliente'}`,
+      details: `Solicitud ${requestNumber} creada para ${(newRequest as any)?.client?.name ?? 'cliente'}`,
     });
 
     return NextResponse.json(newRequest, { status: 201 });
   } catch (error: any) {
     console.error('Requests POST error:', error);
-    return NextResponse.json({ error: 'Error al crear solicitud' }, { status: 500 });
+    const raw = String(error?.message ?? '');
+    const message = /Unknown argument/.test(raw)
+      ? 'No se guardó nada. El servidor todavía no reconoce los campos nuevos del ingreso (proforma, notificación sanitaria y análisis adicionales).'
+      : 'No se pudo crear la solicitud. No se guardó ningún dato.';
+    return NextResponse.json({ error: message, issues: [issueFromServer(message)] }, { status: 500 });
   }
 }
