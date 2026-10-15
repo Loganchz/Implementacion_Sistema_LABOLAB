@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import { createLocalPdfJob } from '@/lib/pdf';
+import { intakeFactsHtml, intakeText } from '@/lib/intake-sheet';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -17,11 +18,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
       include: {
         client: true,
         request: {
-          include: { items: { include: { analysisType: true } } },
+          include: { sampleType: true, items: { include: { analysisType: true } } },
         },
         links: {
           include: {
-            request: { select: { requestNumber: true, productName: true, lot: true, description: true, sampleCount: true } },
+            request: { include: { sampleType: true } },
           },
         },
         items: {
@@ -167,21 +168,23 @@ export async function POST(request: Request, { params }: { params: { id: string 
     <div class="info-box">
       <h4>Datos del Cliente</h4>
       <div class="info-row"><span class="info-label">Cliente:</span><span class="info-value">${client?.name ?? ''}</span></div>
-      <div class="info-row"><span class="info-label">RUC/Cédula:</span><span class="info-value">${client?.ruc ?? '-'}</span></div>
-      <div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">${client?.address ?? '-'}</span></div>
-      <div class="info-row"><span class="info-label">Teléfono:</span><span class="info-value">${client?.phone ?? '-'}</span></div>
-      <div class="info-row"><span class="info-label">Email:</span><span class="info-value">${client?.email ?? '-'}</span></div>
+      <div class="info-row"><span class="info-label">RUC/Cédula:</span><span class="info-value">${intakeText(client?.ruc)}</span></div>
+      <div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">${intakeText(client?.address)}</span></div>
+      <div class="info-row"><span class="info-label">Teléfono:</span><span class="info-value">${intakeText(client?.phone)}</span></div>
+      <div class="info-row"><span class="info-label">Email:</span><span class="info-value">${intakeText(client?.email)}</span></div>
     </div>
     <div class="info-box">
       <h4>Datos de la Proforma</h4>
       <div class="info-row"><span class="info-label">Fecha:</span><span class="info-value">${dateStr}</span></div>
-      <div class="info-row"><span class="info-label">Solicitud:</span><span class="info-value">${esc(samplesForPdf.map((sample: any) => sample?.requestNumber).filter(Boolean).join(', ') || req?.requestNumber || '-')}</span></div>
-      <div class="info-row"><span class="info-label">Muestra:</span><span class="info-value">${sampleSummary || '-'}</span></div>
+      <div class="info-row"><span class="info-label">Solicitud:</span><span class="info-value">${esc(samplesForPdf.map((sample: any) => sample?.requestNumber).filter(Boolean).join(', ') || req?.requestNumber || 'N/A')}</span></div>
+      <div class="info-row"><span class="info-label">Muestra:</span><span class="info-value">${sampleSummary || 'N/A'}</span></div>
       <div class="info-row"><span class="info-label">Presentación:</span><span class="info-value">${presentationText}</span></div>
       <div class="info-row"><span class="info-label">N° Muestras:</span><span class="info-value">${sampleCount}</span></div>
       <div class="info-row"><span class="info-label">Vigencia:</span><span class="info-value">${quote.validDays} días (hasta ${validStr})</span></div>
     </div>
   </div>
+
+  ${samplesForPdf.map((sample: any) => intakeFactsHtml(sample)).join('') || intakeFactsHtml(req)}
 
   <table>
     <thead>

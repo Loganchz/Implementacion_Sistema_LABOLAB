@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import QRCode from 'qrcode';
 import { createLocalPdfJob } from '@/lib/pdf';
-import { storageConditionLabel } from '@/lib/storage-condition';
+import { intakeFactsHtml, intakeStorage, intakeText } from '@/lib/intake-sheet';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -20,7 +20,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
         workOrder: {
           include: {
             client: true,
-            quote: { include: { request: true } },
+            quote: {
+              include: {
+                request: { include: { sampleType: true } },
+                links: { include: { request: { include: { sampleType: true } } } },
+              },
+            },
             samples: {
               include: {
                 sampleType: true,
@@ -144,8 +149,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
     <div class="info-box">
       <h4>Datos del Cliente</h4>
       <div class="info-row"><span class="info-label">Cliente:</span><span class="info-value">${client?.name ?? ''}</span></div>
-      <div class="info-row"><span class="info-label">RUC/Cédula:</span><span class="info-value">${client?.ruc ?? '-'}</span></div>
-      <div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">${client?.address ?? '-'}</span></div>
+      <div class="info-row"><span class="info-label">RUC/Cédula:</span><span class="info-value">${intakeText(client?.ruc)}</span></div>
+      <div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">${intakeText(client?.address)}</span></div>
     </div>
     <div class="info-box">
       <h4>Datos del Informe</h4>
@@ -158,17 +163,22 @@ export async function POST(request: Request, { params }: { params: { id: string 
   <div class="info-grid">
     <div class="info-box">
       <h4>Información de la Muestra</h4>
-      <div class="info-row"><span class="info-label">Producto:</span><span class="info-value">${req.productName ?? req.description ?? '-'}</span></div>
-      <div class="info-row"><span class="info-label">Marca / Lote:</span><span class="info-value">${[req.brand, req.lot].filter(Boolean).join(' / ') || '-'}</span></div>
-      <div class="info-row"><span class="info-label">Envase:</span><span class="info-value">${req.packaging ?? '-'}</span></div>
+      <div class="info-row"><span class="info-label">Producto:</span><span class="info-value">${intakeText(req.productName || req.description)}</span></div>
+      <div class="info-row"><span class="info-label">Marca / Lote:</span><span class="info-value">${intakeText([req.brand, req.lot].filter((part: string) => part && part !== 'N/A').join(' / '))}</span></div>
+      <div class="info-row"><span class="info-label">Envase:</span><span class="info-value">${intakeText(req.packaging)}</span></div>
     </div>
     <div class="info-box">
       <h4>Recepción</h4>
-      <div class="info-row"><span class="info-label">Conservación:</span><span class="info-value">${storageConditionLabel(req.storageCondition) || '-'}</span></div>
-      <div class="info-row"><span class="info-label">Contenido:</span><span class="info-value">${req.contentAmount ?? '-'}</span></div>
-      <div class="info-row"><span class="info-label">N° Muestras:</span><span class="info-value">${req.sampleCount ?? samples.length ?? '-'}</span></div>
+      <div class="info-row"><span class="info-label">Conservación:</span><span class="info-value">${intakeStorage(req.storageCondition)}</span></div>
+      <div class="info-row"><span class="info-label">Contenido:</span><span class="info-value">${intakeText(req.contentAmount)}</span></div>
+      <div class="info-row"><span class="info-label">N° Muestras:</span><span class="info-value">${req.sampleCount ?? samples.length ?? 'N/A'}</span></div>
     </div>
   </div>
+
+  ${((report.workOrder?.quote?.links ?? []).map((link: any) => link?.request).filter(Boolean).length
+    ? (report.workOrder?.quote?.links ?? []).map((link: any) => link?.request).filter(Boolean)
+    : [req]
+  ).map((sample: any) => intakeFactsHtml(sample)).join('')}
 
   <table>
     <thead>

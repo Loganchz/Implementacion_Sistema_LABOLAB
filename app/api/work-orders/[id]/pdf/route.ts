@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import { createLocalPdfJob } from '@/lib/pdf';
-import { storageConditionLabel } from '@/lib/storage-condition';
+import { intakeDate, intakeFactsHtml, intakeStorage, intakeText } from '@/lib/intake-sheet';
 
 function fmtDate(d: any) {
   if (!d) return '';
@@ -24,7 +24,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
         client: true,
         items: { include: { analysisType: true } },
         samples: { include: { sampleType: true } },
-        quote: { include: { request: { include: { sampleType: true } } } },
+        quote: {
+          include: {
+            request: { include: { sampleType: true } },
+            links: { include: { request: { include: { sampleType: true } } } },
+          },
+        },
       },
     });
     if (!workOrder) return NextResponse.json({ error: 'Orden no encontrada' }, { status: 404 });
@@ -51,8 +56,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
         }).join('')
       : '<tr><td colspan="4" style="text-align:center;color:#888;">Sin parámetros en esta área</td></tr>';
 
-    const sampleDesc = req.productName || workOrder.samples?.[0]?.description || req.description || '-';
-    const sampleType = req.sampleType?.name || workOrder.samples?.[0]?.sampleType?.name || '-';
+    const linked = (workOrder.quote?.links ?? []).map((link: any) => link?.request).filter(Boolean);
+    const intakeSamples = linked.length ? linked : [req];
+    const sampleDesc = intakeText(req.productName || workOrder.samples?.[0]?.description || req.description);
+    const sampleType = intakeText(req.sampleType?.name || workOrder.samples?.[0]?.sampleType?.name);
 
     const html_content = `
 <!DOCTYPE html>
@@ -92,13 +99,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
   <div class="doc-num">N° ${workOrder.orderNumber ?? ''}</div>
 
   <table class="info">
-    <tr><td class="lbl">Fecha de recepción</td><td>${fmtDate(req.receptionDate || workOrder.receivedAt)}</td><td class="lbl">Cliente</td><td>${client?.name ?? ''}</td></tr>
+    <tr><td class="lbl">Fecha de recepción</td><td>${intakeDate(req.receptionDate || workOrder.receivedAt)}</td><td class="lbl">Cliente</td><td>${intakeText(client?.name)}</td></tr>
     <tr><td class="lbl">Muestra</td><td>${sampleType}</td><td class="lbl">Descripción de la muestra</td><td>${sampleDesc}</td></tr>
-    <tr><td class="lbl">Marca / Lote</td><td>${[req.brand, req.lot].filter(Boolean).join(' / ') || '-'}</td><td class="lbl">N° de muestras</td><td>${req.sampleCount ?? workOrder.samples?.length ?? '-'}</td></tr>
-    <tr><td class="lbl">Envase</td><td>${req.packaging ?? '-'}</td><td class="lbl">Contenido</td><td>${req.contentAmount ?? '-'}</td></tr>
-    <tr><td class="lbl">Condiciones de conservación</td><td>${storageConditionLabel(req.storageCondition) || '-'}</td><td class="lbl">Toma de muestra por</td><td>${req.samplingBy ?? req.responsibleName ?? '-'}</td></tr>
-    <tr><td class="lbl">Fecha elaboración</td><td>${fmtDate(req.elaborationDate) || '-'}</td><td class="lbl">Fecha vencimiento</td><td>${fmtDate(req.expirationDate) || '-'}</td></tr>
+    <tr><td class="lbl">Marca / Lote</td><td>${intakeText([req.brand, req.lot].filter((part: string) => part && part !== 'N/A').join(' / '))}</td><td class="lbl">N° de muestras</td><td>${req.sampleCount ?? workOrder.samples?.length ?? 'N/A'}</td></tr>
+    <tr><td class="lbl">Envase</td><td>${intakeText(req.packaging)}</td><td class="lbl">Contenido</td><td>${intakeText(req.contentAmount)}</td></tr>
+    <tr><td class="lbl">Condiciones de conservación</td><td>${intakeStorage(req.storageCondition)}</td><td class="lbl">Toma de muestra por</td><td>${intakeText(req.samplingBy || req.responsibleName)}</td></tr>
+    <tr><td class="lbl">Fecha elaboración</td><td>${intakeDate(req.elaborationDate)}</td><td class="lbl">Fecha vencimiento</td><td>${intakeDate(req.expirationDate)}</td></tr>
   </table>
+
+  ${intakeSamples.map((sample: any) => intakeFactsHtml(sample)).join('')}
 
   <div class="section"><h4>Parámetros Microbiológicos</h4>
     <table class="params"><thead><tr><th>Parámetro</th><th>Unidad</th><th>Método</th><th>Rango</th></tr></thead>
