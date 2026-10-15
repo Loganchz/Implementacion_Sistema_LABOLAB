@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { buildQuoteLines, QuotePresentationMode } from '@/lib/quote-build';
 import { deletionBlockReason } from '@/lib/sample-deletion';
 import { IntakeForm, IntakeValues, emptyIntake, productKeyForSampleType, PRODUCT_ANALYSIS_MAP } from '@/components/intake-form';
-import { checkIntake } from '@/lib/intake-rules';
+import { checkIntake, issueFromServer, IntakeIssue } from '@/lib/intake-rules';
 
 export default function SolicitudesPage() {
   const router = useRouter();
@@ -24,8 +24,12 @@ export default function SolicitudesPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<IntakeValues>(emptyIntake());
-  const [createIssues, setCreateIssues] = useState<string[]>([]);
-  const [editIssues, setEditIssues] = useState<string[]>([]);
+  const [createAttempted, setCreateAttempted] = useState(false);
+  const [createServerIssues, setCreateServerIssues] = useState<IntakeIssue[]>([]);
+  const [createScroll, setCreateScroll] = useState(0);
+  const [editAttempted, setEditAttempted] = useState(false);
+  const [editServerIssues, setEditServerIssues] = useState<IntakeIssue[]>([]);
+  const [editScroll, setEditScroll] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewing, setViewing] = useState<any | null>(null);
   const [sheetEditing, setSheetEditing] = useState(false);
@@ -56,20 +60,49 @@ export default function SolicitudesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const explain = (list: IntakeIssue[]) => list.map((issue) => `${issue.label}: ${issue.message}`).join('\n');
+  const readIssues = (payload: any, fallback: string): IntakeIssue[] => {
+    if (Array.isArray(payload?.issues) && payload.issues.length) return payload.issues;
+    return [issueFromServer(payload?.error || fallback)];
+  };
+  const mergeIssues = (live: IntakeIssue[], server: IntakeIssue[]) => {
+    const seen = new Set(live.map((issue) => issue.field));
+    return [...live, ...server.filter((issue) => !seen.has(issue.field))];
+  };
+  const createCheck = checkIntake(form);
+  const createIssues = createAttempted ? mergeIssues(createCheck.issues, createServerIssues) : createServerIssues;
+
   const handleCreate = async () => {
+    setCreateServerIssues([]);
+    setCreateAttempted(true);
     const check = checkIntake(form);
-    setCreateIssues(check.fields);
-    if (!check.ok) { toast.error(check.messages[0]); return; }
+    if (!check.ok) {
+      setCreateScroll((value) => value + 1);
+      toast.error('No se puede guardar', { description: explain(check.issues) });
+      return;
+    }
     try {
       const res = await fetch('/api/requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, sampleCount: check.sampleCount }) });
       if (res.ok) {
         toast.success('Solicitud creada');
         setDialogOpen(false);
         setForm(emptyIntake());
-        setCreateIssues([]);
+        setCreateAttempted(false);
+        setCreateServerIssues([]);
         loadData();
-      } else { const err = await res.json(); toast.error(err?.error ?? 'Error'); }
-    } catch { toast.error('Error'); }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const issues = readIssues(err, 'No se pudo crear la solicitud.');
+        setCreateServerIssues(issues);
+        setCreateScroll((value) => value + 1);
+        toast.error('No se pudo guardar', { description: explain(issues) });
+      }
+    } catch {
+      const issues = [issueFromServer('No se pudo contactar al servidor. Revise la conexión e intente de nuevo.')];
+      setCreateServerIssues(issues);
+      setCreateScroll((value) => value + 1);
+      toast.error('No se pudo guardar', { description: explain(issues) });
+    }
   };
 
   useEffect(() => {
@@ -134,6 +167,16 @@ export default function SolicitudesPage() {
     responsibleName: row?.responsibleName ?? '',
     invoiceEmail: row?.invoiceEmail ?? '',
     reportEmail: row?.reportEmail ?? '',
+    quoteNumber: row?.quoteNumber ?? '',
+    isSanitaryNotification: Boolean(row?.isSanitaryNotification),
+    packagingMaterial: row?.packagingMaterial ?? '',
+    servingSize: row?.servingSize ?? '',
+    shelfLife: row?.shelfLife ?? '',
+    dilution: row?.dilution ?? '',
+    hasCustomAnalyses: Boolean(row?.hasCustomAnalyses),
+    customAnalyses: Array.isArray(row?.customAnalyses) && row.customAnalyses.length > 0
+      ? row.customAnalyses
+      : [{ analysis: '', technique: '' }],
   });
 
   const openSheet = (row: any) => {
@@ -141,13 +184,15 @@ export default function SolicitudesPage() {
     setViewing(row);
     setSheetForm(next);
     setSheetEditing(false);
-    setEditIssues([]);
+    setEditAttempted(false);
+    setEditServerIssues([]);
   };
 
   const closeSheet = () => {
     setViewing(null);
     setSheetEditing(false);
-    setEditIssues([]);
+    setEditAttempted(false);
+    setEditServerIssues([]);
   };
 
   const canEditSheet = viewing?.status === 'BORRADOR';
@@ -163,14 +208,23 @@ export default function SolicitudesPage() {
       setSheetForm(intakeFromRow(viewing));
     }
     setSheetEditing(false);
-    setEditIssues([]);
+    setEditAttempted(false);
+    setEditServerIssues([]);
   };
+
+  const editCheck = checkIntake(sheetForm);
+  const editIssues = editAttempted ? mergeIssues(editCheck.issues, editServerIssues) : editServerIssues;
 
   const saveEdit = async () => {
     if (!viewing?.id || viewing.status !== 'BORRADOR') return;
+    setEditServerIssues([]);
+    setEditAttempted(true);
     const check = checkIntake(sheetForm);
-    setEditIssues(check.fields);
-    if (!check.ok) { toast.error(check.messages[0]); return; }
+    if (!check.ok) {
+      setEditScroll((value) => value + 1);
+      toast.error('No se puede guardar', { description: explain(check.issues) });
+      return;
+    }
     setSavingEdit(true);
     try {
       const res = await fetch(`/api/requests/${viewing.id}`, {
@@ -183,14 +237,23 @@ export default function SolicitudesPage() {
         toast.success('Muestra actualizada');
         setViewing(updated);
         setSheetForm(intakeFromRow(updated));
-        setEditIssues([]);
+        setEditAttempted(false);
+        setEditServerIssues([]);
         setSheetEditing(false);
         loadData();
       } else {
-        const err = await res.json();
-        toast.error(err?.error ?? 'No se pudo guardar');
+        const err = await res.json().catch(() => ({}));
+        const issues = readIssues(err, 'No se pudo guardar la solicitud.');
+        setEditServerIssues(issues);
+        setEditScroll((value) => value + 1);
+        toast.error('No se pudo guardar', { description: explain(issues) });
       }
-    } catch { toast.error('No se pudo guardar'); }
+    } catch {
+      const issues = [issueFromServer('No se pudo contactar al servidor. Revise la conexión e intente de nuevo.')];
+      setEditServerIssues(issues);
+      setEditScroll((value) => value + 1);
+      toast.error('No se pudo guardar', { description: explain(issues) });
+    }
     finally { setSavingEdit(false); }
   };
 
@@ -319,7 +382,7 @@ export default function SolicitudesPage() {
                 <Trash2 className="w-4 h-4 mr-2" /> Eliminar ({selectedRows.length})
               </Button>
             )}
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setCreateIssues([]); }}>
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setCreateAttempted(false); setCreateServerIssues([]); } }}>
             <DialogTrigger asChild>
               <Button className="bg-[#00AEEF] hover:bg-[#005F9E] text-white"><Plus className="w-4 h-4 mr-2" /> Nuevo Ingreso</Button>
             </DialogTrigger>
@@ -327,11 +390,17 @@ export default function SolicitudesPage() {
               <DialogHeader><DialogTitle>Nuevo Ingreso de Muestra</DialogTitle></DialogHeader>
               <IntakeForm
                 form={form}
-                onChange={setForm}
+                onChange={(next) => {
+                  setCreateServerIssues((current) => current.filter((issue) => (
+                    issue.field === 'form' || (issue.field === 'quoteNumber' && next.quoteNumber === form.quoteNumber)
+                  )));
+                  setForm(next);
+                }}
                 clients={clients}
                 sampleTypes={sampleTypes}
                 analysisTypes={analysisTypes}
                 issues={createIssues}
+                scrollToken={createScroll}
                 onSubmit={handleCreate}
                 submitLabel="Registrar Ingreso"
               />
@@ -364,11 +433,17 @@ export default function SolicitudesPage() {
           {viewing && (
             <IntakeForm
               form={sheetForm}
-              onChange={setSheetForm}
+              onChange={(next) => {
+                setEditServerIssues((current) => current.filter((issue) => (
+                  issue.field === 'form' || (issue.field === 'quoteNumber' && next.quoteNumber === sheetForm.quoteNumber)
+                )));
+                setSheetForm(next);
+              }}
               clients={clients}
               sampleTypes={sampleTypes}
               analysisTypes={analysisTypes}
               issues={sheetEditing ? editIssues : []}
+              scrollToken={editScroll}
               readOnly={!sheetEditing}
             />
           )}
