@@ -119,3 +119,70 @@
     display: none !important;
   }
 }
+
+/* LaboLab Palpitador Animations */
+@keyframes labo-heartbeat {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 174, 239, 0.45);
+  }
+  14% {
+    transform: scale(1.08);
+    box-shadow: 0 0 26px 8px rgba(0, 174, 239, 0.55);
+  }
+  28% {
+    transform: scale(1.02);
+    box-shadow: 0 0 12px 4px rgba(0, 95, 158, 0.4);
+  }
+  42% {
+    transform: scale(1.14);
+    box-shadow: 0 0 38px 14px rgba(0, 174, 239, 0.65);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 174, 239, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 174, 239, 0);
+  }
+}
+
+@keyframes labo-ripple {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.85;
+  }
+  65% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+
+@keyframes labo-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-labo-heartbeat {
+  animation: labo-heartbeat 1.6s cubic-bezier(0.21, 0.61, 0.35, 1) infinite;
+}
+
+.animate-labo-ripple {
+  animation: labo-ripple 1.6s cubic-bezier(0.21, 0.61, 0.35, 1) infinite;
+}
+
+.animate-labo-shimmer {
+  background: linear-gradient(90deg, rgba(0, 174, 239, 0.15) 0%, rgba(0, 174, 239, 0.9) 50%, rgba(0, 174, 239, 0.15) 100%);
+  background-size: 200% 100%;
+  animation: labo-shimmer 2.2s infinite ease-in-out;
+}
+

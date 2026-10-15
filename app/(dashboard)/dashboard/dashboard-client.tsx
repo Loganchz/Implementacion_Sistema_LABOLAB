@@ -15,6 +15,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { LaboLabLoader } from '@/components/labolab-loader';
 
 const DashboardCharts = dynamic(() => import('./dashboard-charts'), { ssr: false });
 
@@ -32,10 +33,13 @@ interface DashboardStats {
 }
 
 export function DashboardClient() {
-  const { data: session } = useSession() || {};
+  const { data: session, status } = useSession() || {};
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [clientStats, setClientStats] = useState<{ requests: number; activeOrders: number; availableReports: number } | null>(null);
+
+  const isSessionLoading = status === 'loading';
+  const userRole = (session?.user as any)?.role;
 
   useEffect(() => {
     async function loadStats() {
@@ -54,8 +58,6 @@ export function DashboardClient() {
     loadStats();
   }, []);
 
-  const userRole = (session?.user as any)?.role ?? 'CLIENTE';
-
   useEffect(() => {
     if (userRole !== 'CLIENTE') return;
     async function loadMe() {
@@ -71,6 +73,18 @@ export function DashboardClient() {
     }
     loadMe();
   }, [userRole]);
+
+  // Prevent flash: show branded pulsating loader while session or initial data is loading
+  if (isSessionLoading || loading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <LaboLabLoader
+          message="Cargando panel de control..."
+          submessage="Estableciendo comunicación y verificando estación de trabajo"
+        />
+      </div>
+    );
+  }
 
   if (userRole === 'CLIENTE') {
     return (

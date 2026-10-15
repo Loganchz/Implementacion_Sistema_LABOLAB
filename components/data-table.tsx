@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2 } from 'lucide-react';
+import { LaboLabLoader } from '@/components/labolab-loader';
 
 export interface Column<T> {
   key: string;
@@ -37,9 +37,12 @@ export function DataTable<T extends Record<string, any>>({
 }: DataTableProps<T>) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-[#00AEEF] animate-spin" />
-        <span className="ml-2 text-sm text-muted-foreground">Cargando...</span>
+      <div className="bg-white rounded-xl border border-gray-100 py-10">
+        <LaboLabLoader
+          size="sm"
+          message="Consultando registros analíticos..."
+          submessage=""
+        />
       </div>
     );
   }

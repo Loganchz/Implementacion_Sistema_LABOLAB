@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { FieldInfo } from '@/components/field-info';
 import { FlaskConical, Plus, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { LaboLabLoader } from '@/components/labolab-loader';
 
 export default function ResultadosPage() {
   const [samples, setSamples] = useState<any[]>([]);
@@ -113,7 +114,12 @@ export default function ResultadosPage() {
       <PageHeader title="Resultados de Análisis" description="Registrar y verificar resultados" icon={FlaskConical} />
 
       {loading ? (
-        <p className="text-center py-10 text-muted-foreground">Cargando...</p>
+        <div className="bg-white rounded-xl border border-gray-100 py-12">
+          <LaboLabLoader
+            message="Cargando muestras y ensayos analíticos..."
+            submessage="Consultando órdenes de trabajo activas y parámetros fisicoquímicos/microbiológicos"
+          />
+        </div>
       ) : (samples ?? []).length === 0 ? (
         <p className="text-center py-10 text-muted-foreground">No hay muestras pendientes de análisis</p>
       ) : (

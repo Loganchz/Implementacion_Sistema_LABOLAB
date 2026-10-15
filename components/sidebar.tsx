@@ -63,14 +63,17 @@ export function Sidebar() {
   const { collapsed, toggleCollapsed } = useSidebar();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
-  const { data: session } = useSession() || {};
-  const userRole = (session?.user as any)?.role ?? 'CLIENTE';
+  const { data: session, status } = useSession() || {};
+  const isSessionLoading = status === 'loading';
+  const userRole = (session?.user as any)?.role;
 
-  const items = userRole === 'CLIENTE'
-    ? clientNavItems
-    : navItems.filter((item: NavItem) =>
-        !item.permission || hasPermission(userRole, item.permission as any)
-      );
+  const items = isSessionLoading
+    ? []
+    : userRole === 'CLIENTE'
+      ? clientNavItems
+      : navItems.filter((item: NavItem) =>
+          !item.permission || hasPermission(userRole, item.permission as any)
+        );
 
   return (
     <>
@@ -140,41 +143,67 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-          {items.map((item: NavItem) => {
-            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group relative',
-                  collapsed && 'justify-center px-0',
-                  isActive
-                    ? 'bg-[#00AEEF]/10 text-[#005F9E]'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon className={cn('w-5 h-5 shrink-0', isActive ? 'text-[#00AEEF]' : 'text-gray-500 group-hover:text-gray-700')} />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
-            );
-          })}
+          {isSessionLoading ? (
+            <div className="space-y-2 py-1 px-1">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg animate-pulse',
+                    collapsed && 'justify-center px-0'
+                  )}
+                >
+                  <div className="w-5 h-5 bg-gray-200 rounded shrink-0" />
+                  {!collapsed && <div className="h-4 bg-gray-200 rounded w-28" />}
+                </div>
+              ))}
+            </div>
+          ) : (
+            items.map((item: NavItem) => {
+              const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group relative',
+                    collapsed && 'justify-center px-0',
+                    isActive
+                      ? 'bg-[#00AEEF]/10 text-[#005F9E]'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  )}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <Icon className={cn('w-5 h-5 shrink-0', isActive ? 'text-[#00AEEF]' : 'text-gray-500 group-hover:text-gray-700')} />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </Link>
+              );
+            })
+          )}
         </nav>
 
         {/* User info + Logout */}
         <div className="border-t border-gray-100 p-3">
-          {!collapsed && session?.user && (
-            <div className="mb-2 px-2">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {session.user.name ?? 'Usuario'}
-              </p>
-              <p className="text-xs text-gray-500">
-                {getRoleLabel(userRole)}
-              </p>
-            </div>
+          {isSessionLoading ? (
+            !collapsed && (
+              <div className="mb-2 px-2 space-y-1.5 animate-pulse">
+                <div className="h-3.5 bg-gray-200 rounded w-24" />
+                <div className="h-2.5 bg-gray-100 rounded w-16" />
+              </div>
+            )
+          ) : (
+            !collapsed && session?.user && (
+              <div className="mb-2 px-2">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {session.user.name ?? 'Usuario'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {getRoleLabel(userRole ?? 'CLIENTE')}
+                </p>
+              </div>
+            )
           )}
           <button
             onClick={() => signOut({ callbackUrl: '/login' })}

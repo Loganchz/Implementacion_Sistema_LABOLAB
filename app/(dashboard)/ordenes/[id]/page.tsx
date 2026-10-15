@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { ClipboardList, Plus, TestTubes, ArrowLeft, Tag, FileBarChart, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { LaboLabLoader } from '@/components/labolab-loader';
+import { storageConditionCodes, storageConditionLabel } from '@/lib/storage-condition';
 
 export default function OrdenDetallePage() {
   const params = useParams();
@@ -61,16 +63,16 @@ export default function OrdenDetallePage() {
     const hasFq = items.some((i: any) => i?.analysisType?.area === 'FISICOQUIMICA');
     const hasMica = items.some((i: any) => i?.analysisType?.area === 'MICROBIOLOGIA');
     const suggestedArea = (!hasFq && hasMica) ? 'MICROBIOLOGIA' : 'FISICOQUIMICA';
-    const validStorage = ['REFRIGERACION', 'CONGELACION', 'AMBIENTE'];
+    const storageCodes = storageConditionCodes(req?.storageCondition);
     setSampleForm({
       description: [req?.productName, req?.brand].filter(Boolean).join(' - '),
       sampleTypeId: req?.sampleTypeId || '',
       quantity: req?.contentAmount || '',
       unit: '',
       receptionCondition: '',
-      storageCondition: validStorage.includes(req?.storageCondition) ? req.storageCondition : 'AMBIENTE',
+      storageCondition: storageCodes[0] ?? 'AMBIENTE',
       area: suggestedArea,
-      notes: req?.lot ? `Lote: ${req.lot}` : '',
+      notes: [req?.lot ? `Lote: ${req.lot}` : '', storageCodes.length > 1 ? `Conservación: ${storageConditionLabel(req?.storageCondition)}` : ''].filter(Boolean).join(' · '),
     });
     setSampleDialog(true);
   };
@@ -152,7 +154,16 @@ export default function OrdenDetallePage() {
   const hasEmittedReport = (order?.reports ?? []).some((r: any) => r?.status === 'EMITIDO' || r?.status === 'ENVIADO');
   const canComplete = hasSamples && allSamplesHaveResults && hasEmittedReport;
 
-  if (loading) return <div className="flex items-center justify-center py-20"><span className="text-muted-foreground">Cargando...</span></div>;
+  if (loading) {
+    return (
+      <div className="py-20 flex items-center justify-center">
+        <LaboLabLoader
+          message="Cargando orden de trabajo..."
+          submessage="Obteniendo muestras, análisis y estados"
+        />
+      </div>
+    );
+  }
   if (!order) return <div className="text-center py-20 text-muted-foreground">Orden no encontrada</div>;
 
   return (

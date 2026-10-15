@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { LaboLabLoader } from '@/components/labolab-loader';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,15 +33,27 @@ export default function LoginPage() {
       });
       if (result?.error) {
         toast.error('Credenciales inválidas');
+        setLoading(false);
       } else {
+        setRedirecting(true);
         router.replace('/dashboard');
       }
     } catch {
       toast.error('Error al iniciar sesión');
-    } finally {
       setLoading(false);
     }
   };
+
+  if (redirecting) {
+    return (
+      <LaboLabLoader
+        fullscreen
+        size="lg"
+        message="Credenciales verificadas"
+        submessage="Estableciendo comunicación con el laboratorio e iniciando estación de trabajo..."
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#005F9E] to-[#00AEEF] p-4">

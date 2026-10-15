@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { FileBarChart, ArrowLeft, Save, Download, Loader2, AlertTriangle, ShieldCheck, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import QRCode from 'qrcode';
+import { LaboLabLoader } from '@/components/labolab-loader';
 
 export default function ReporteDetallePage() {
   const params = useParams();
@@ -115,7 +116,16 @@ export default function ReporteDetallePage() {
     } catch { toast.error('Error'); setGenerating(false); }
   };
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-[#00AEEF] animate-spin" /></div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <LaboLabLoader
+          message="Cargando informe analítico..."
+          submessage="Preparando resultados, firmas digitales y código de verificación"
+        />
+      </div>
+    );
+  }
   if (!report) return <div className="text-center py-20 text-muted-foreground">Reporte no encontrado</div>;
 
   const client = report?.workOrder?.client;
