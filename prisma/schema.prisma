@@ -222,6 +222,16 @@ model AnalysisRequest {
   invoiceEmail       String?
   reportEmail        String?
 
+  // Datos adicionales oficiales (Notificación Sanitaria, Estabilidad, Nutricional y Proforma)
+  quoteNumber            String?   // Número de proforma declarado o 'N/A'
+  isSanitaryNotification Boolean   @default(false)
+  packagingMaterial      String?   // Material de empaque y/o envase
+  servingSize            String?   // Porción de consumo (g o ml)
+  shelfLife              String?   // Tiempo de vida útil
+  dilution               String?   // Dilución (para desinfectantes, detergentes, etc.)
+  hasCustomAnalyses      Boolean   @default(false)
+  customAnalyses         Json?     // Lista dinámica de { analysis: string, technique: string }
+
   createdById   String
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
